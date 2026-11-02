@@ -538,7 +538,10 @@
     :fn (mg/resource "app/migrations/sql/0157-migrate-legacy-file-data.sql")}
 
    {:name "0158-del-forbidden-file-library-rels"
-    :fn (mg/resource "app/migrations/sql/0158-del-forbidden-file-library-rels.sql")}])
+    :fn (mg/resource "app/migrations/sql/0158-del-forbidden-file-library-rels.sql")}
+
+   {:name "0159-add-file-data-storage-object-id"
+    :fn (mg/resource "app/migrations/sql/0159-add-file-data-storage-object-id.sql")}])
 
 (defn apply-migrations!
   [pool name migrations]
