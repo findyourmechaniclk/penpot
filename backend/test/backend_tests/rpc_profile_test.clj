@@ -1013,6 +1013,79 @@
             (t/is (= :registration-disabled (-> out :error ex-data :code)))
             (t/is (nil? (th/db-get :profile {:email email})))))))))
 
+(defn- create-oidc-register-token
+  "Mint a `:prepared-register` token shaped like the ones the OIDC
+  callback produces in `redirect-to-register` (no real provider needed)."
+  [email extra]
+  (tokens/generate th/*system*
+                   (merge {:iss :prepared-register
+                           :exp (ct/in-future "48h")
+                           :backend "oidc"
+                           :email email
+                           :fullname "OIDC User"
+                           :email-verified true
+                           :props {}}
+                          extra)))
+
+(t/deftest register-profile-allows-oidc-registration-with-password-login-disabled
+  ;; Issue #12964: with password login and public registration disabled,
+  ;; a new user arriving from OIDC must still be able to register when
+  ;; `oidc-registration` is enabled.
+  (with-redefs [app.config/flags #{:login-with-oidc :oidc-registration}]
+    (let [email  "oidc-user@example.com"
+          token  (create-oidc-register-token email nil)
+          out    (th/command! {::th/type :register-profile
+                               :token token})
+          result (:result out)
+          mdata  (meta result)]
+      (t/is (th/success? out))
+      ;; A session is minted: the user lands on the dashboard.
+      (t/is (seq (:app.rpc/response-transform-fns mdata)))
+      (let [profile (th/db-get :profile {:email email})]
+        (t/is (some? profile))
+        (t/is (= "oidc" (:auth-backend profile)))
+        (t/is (true? (:is-active profile)))))))
+
+(t/deftest register-profile-rejects-oidc-without-registration-flags
+  (with-redefs [app.config/flags #{:login-with-oidc}]
+    (let [email "oidc-rejected@example.com"
+          token (create-oidc-register-token email nil)
+          out   (th/command! {::th/type :register-profile
+                              :token token})]
+      (t/is (not (th/success? out)))
+      (t/is (= :registration-disabled (-> out :error ex-data :code)))
+      (t/is (nil? (th/db-get :profile {:email email}))))))
+
+(t/deftest register-profile-allows-oidc-with-public-registration-and-password-login-disabled
+  (with-redefs [app.config/flags #{:login-with-oidc :registration}]
+    (let [email  "oidc-public@example.com"
+          token  (create-oidc-register-token email nil)
+          out    (th/command! {::th/type :register-profile
+                               :token token})]
+      (t/is (th/success? out))
+      (let [profile (th/db-get :profile {:email email})]
+        (t/is (some? profile))
+        (t/is (= "oidc" (:auth-backend profile)))))))
+
+(t/deftest register-profile-allows-oidc-with-invitation-and-registration-disabled
+  (let [email   "oidc-invited@example.com"
+        fixture (create-invitation-fixture email (ct/in-future "48h"))]
+    (with-redefs [app.config/flags #{:login-with-oidc :oidc-registration}]
+      (let [itoken (create-test-invitation-token fixture email)
+            token  (create-oidc-register-token email {:invitation-token itoken})
+            out    (th/command! {::th/type :register-profile
+                                 :token token})
+            result (:result out)
+            mdata  (meta result)]
+        (t/is (th/success? out))
+        ;; Invitation branch: the token is echoed back and a session is
+        ;; minted so the frontend can complete the team-invitation flow.
+        (t/is (string? (:invitation-token result)))
+        (t/is (seq (:app.rpc/response-transform-fns mdata)))
+        (let [profile (th/db-get :profile {:email email})]
+          (t/is (some? profile))
+          (t/is (= "oidc" (:auth-backend profile))))))))
+
 (t/deftest verify-token-redirects-invitation-based-on-member-id
   (with-redefs [app.config/flags #{:login-with-password}]
     (let [owner  (th/create-profile* 1 {:is-active true})
