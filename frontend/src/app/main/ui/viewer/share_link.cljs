@@ -10,6 +10,7 @@
    [app.common.data :as d]
    [app.common.data.macros :as dm]
    [app.common.logging :as log]
+   [app.config :as cf]
    [app.main.data.common :as dc]
    [app.main.data.event :as ev]
    [app.main.data.modal :as modal]
@@ -27,6 +28,7 @@
    [app.util.dom :as dom]
    [app.util.i18n :as i18n :refer [tr]]
    [app.util.keyboard :as kbd]
+   [cuerdas.core :as str]
    [rumext.v2 :as mf]))
 
 (log/set-level! :warn)
@@ -36,6 +38,12 @@
   {:pages pages
    :who-comment who-comment
    :who-inspect who-inspect})
+
+(defn- permission-label
+  [value]
+  (if (= "all" value)
+    (tr "common.share-link.all-users")
+    (tr "common.share-link.team-members")))
 
 (defn- link->url
   [router route page-ids zoom-type link]
@@ -87,6 +95,52 @@
      (when ^boolean expanded
        [:div {:id content-id}
         children])]))
+
+(mf/defc collapsible-link*
+  {::mf/private true
+   ::mf/memo true}
+  [{:keys [file link get-link-url]}]
+  (let [{:keys [pages who-comment who-inspect]} link
+        page-names (dc/get-link-page-names file pages)
+        url        (get-link-url link)
+
+        {:keys [expanded content-id toggle]} (use-collapsible)
+
+        on-copy-to-clipboard
+        (mf/use-fn
+         (mf/deps url)
+         (fn [_]
+           (copy-url-to-clipboard url)))]
+
+    [:div {:class (stl/css :collapsible-link)}
+     [:div {:class (stl/css :collapsible-link-header)}
+      [:button {:class (stl/css :collapsible-title :collapsible-link-toggle)
+                :type "button"
+                :aria-expanded expanded
+                :aria-controls content-id
+                :on-click toggle}
+       [:> icon* {:icon-id (if expanded i/arrow-down i/arrow-right)
+                  :class (stl/css :collapsible-title-icon)}]
+       [:span {:class (stl/css :collapsible-link-url) :title url} url]]
+
+      [:> icon-button* {:variant "ghost"
+                        :aria-label (tr "viewer.header.share.copy-link")
+                        :icon i/clipboard
+                        :on-click on-copy-to-clipboard}]]
+
+     (when ^boolean expanded
+       [:div {:id content-id}
+        [:div {:class (stl/css :collapsible-link-details)}
+         [:span {:class (stl/css :collapsible-link-label)} (tr "common.share-link.permissions-pages")]
+         [:span {:class (stl/css :collapsible-link-value)} (if (str/empty? page-names)
+                                                             (tr "common.share-link.no-pages")
+                                                             page-names)]
+
+         [:span {:class (stl/css :collapsible-link-label)} (tr "common.share-link.permissions-can-comment")]
+         [:span {:class (stl/css :collapsible-link-value)} (permission-label who-comment)]
+
+         [:span {:class (stl/css :collapsible-link-label)} (tr "common.share-link.permissions-can-inspect")]
+         [:span {:class (stl/css :collapsible-link-value)} (permission-label who-inspect)]]])]))
 
 (mf/defc permissions-select-row*
   {::mf/private true}
@@ -176,6 +230,19 @@
                                    :options permissions
                                    :on-change on-inspect-change}]]]))
 
+(mf/defc links-section*
+  {::mf/private true}
+  [{:keys [file links get-link-url]}]
+  [:> collapsible-panel* {:class (stl/css :links-section)
+                          :title (dm/str (tr "common.share-link.links-title")
+                                         " (" (count links) ")")}
+   [:ul {:class (stl/css :links-list)}
+    (for [{:keys [id] :as link} links]
+      [:li {:key (dm/str id)}
+       [:> collapsible-link* {:file file
+                              :link link
+                              :get-link-url get-link-url}]])]])
+
 (mf/defc destroy-link-confirmation*
   {::mf/private true}
   [{:keys [on-cancel on-destroy]}]
@@ -216,6 +283,9 @@
         page-ids         (dm/get-in file [:data :pages])
         all-page-ids     (into #{} page-ids)
 
+        show-links?      (and (contains? cf/flags :shared-links)
+                              (seq share-links))
+
         link-options*    (mf/use-state
                           {:pages #{(:id page)}
                            :who-comment "team"
@@ -234,6 +304,12 @@
         (mf/with-memo [current-share-link page-ids route router zoom-type]
           (when (some? current-share-link)
             (link->url router route page-ids zoom-type current-share-link)))
+
+        get-link-url
+        (mf/use-fn
+         (mf/deps router route page-ids zoom-type)
+         (fn [link]
+           (link->url router route page-ids zoom-type link)))
 
         on-toggle-all
         (fn [_event]
@@ -317,7 +393,12 @@
                                :on-toggle-all on-toggle-all
                                :on-checked-page on-checked-page
                                :on-comment-change on-comment-change
-                               :on-inspect-change on-inspect-change}]]))
+                               :on-inspect-change on-inspect-change}]
+
+     (when show-links?
+       [:> links-section* {:file file
+                           :links share-links
+                           :get-link-url get-link-url}])]))
 
 (mf/defc share-link-dialog
   {::mf/register modal/components
