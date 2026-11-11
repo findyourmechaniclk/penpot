@@ -3188,7 +3188,8 @@
 
                (cond-> (and (not instance-root?)
                             subinstance-head?
-                            remove-swap-slot?)
+                            remove-swap-slot?
+                            (not (ctk/in-component-copy? parent)))
                  (ctk/remove-swap-slot))
 
                (dissoc :shapes
