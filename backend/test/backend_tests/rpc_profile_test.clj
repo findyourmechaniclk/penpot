@@ -1123,6 +1123,25 @@
             (t/is (= :validation (-> vout :error ex-data :type)))
             (t/is (= :invalid-token (-> vout :error ex-data :code)))))))))
 
+(t/deftest register-profile-rejects-prepared-token-without-backend
+  ;; The `:backend` claim is mandatory: a prepared-register token
+  ;; without it is rejected loudly instead of falling into any
+  ;; registration branch.
+  (with-redefs [app.config/flags #{:login-with-oidc :oidc-registration}]
+    (let [token (tokens/generate th/*system*
+                                 {:iss :prepared-register
+                                  :exp (ct/in-future "48h")
+                                  :email "no-backend@example.com"
+                                  :fullname "No Backend"
+                                  :email-verified true
+                                  :props {}})
+          out   (th/command! {::th/type :register-profile
+                              :token token})]
+      (t/is (not (th/success? out)))
+      (t/is (= :validation (-> out :error ex-data :type)))
+      (t/is (= :invalid-token (-> out :error ex-data :code)))
+      (t/is (nil? (th/db-get :profile {:email "no-backend@example.com"}))))))
+
 (t/deftest verify-token-redirects-invitation-based-on-member-id
   (with-redefs [app.config/flags #{:login-with-password}]
     (let [owner  (th/create-profile* 1 {:is-active true})

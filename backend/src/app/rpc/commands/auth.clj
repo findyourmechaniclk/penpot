@@ -517,10 +517,22 @@
                  :token vtoken
                  :extra-data ptoken}))))
 
+(def schema:prepared-register-claims
+  [:map {:title "PreparedRegisterClaims"}
+   [:backend ::sm/text]
+   [:email ::sm/email]])
+
+(def valid-prepared-register-claims?
+  (sm/lazy-validator schema:prepared-register-claims))
+
 (defn register-profile
   [{:keys [::db/conn] :as cfg} {:keys [token] :as params}]
   (let [claims     (tokens/verify cfg {:token token :iss :prepared-register})
-        backend    (or (:backend claims) penpot-backend)
+        _          (when-not (valid-prepared-register-claims? claims)
+                     (ex/raise :type :validation
+                               :code :invalid-token
+                               :hint "prepared-register token contains unexpected data"))
+        backend    (:backend claims)
         invitation (when-let [token (:invitation-token claims)]
                      (tokens/verify cfg {:token token :iss :team-invitation}))
         _          (do (check-registration-flags backend invitation)
