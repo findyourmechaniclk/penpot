@@ -231,9 +231,9 @@
 ;; ---- COMMAND: Prepare Register
 
 (defn- check-registration-flags
-  ;; The `:backend` is the one embedded in the verified
-  ;; `:prepared-register` token: the password flow backend or the
-  ;; provider type (`"oidc"`, `"google"`, ...) for SSO flows.
+  "The `:backend` is the one embedded in the verified
+  `:prepared-register` token: the password flow backend or the
+  provider type (`\"oidc\"`, `\"google\"`, ...) for SSO flows."
   [backend invitation]
   (if (= backend penpot-backend)
     (do
