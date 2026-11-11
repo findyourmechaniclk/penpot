@@ -179,10 +179,27 @@ jobs:
           path: frontend/resources/public
           fail-on-cache-miss: true
 
+      - name: Get pnpm store path
+        id: pnpm-cache
+        shell: bash
+        run: echo "store_path=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Restore pnpm store cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml') }}
+          path: ${{ steps.pnpm-cache.outputs.store_path }}
+
       - name: Install deps
         working-directory: ./frontend
         run: |
           pnpm install --frozen-lockfile;
+
+      - name: Save pnpm store cache
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml') }}
+          path: ${{ steps.pnpm-cache.outputs.store_path }}
 
       # No-op once the shared volume is warm; keeps the first run working.
       - name: Install Playwright Chromium
@@ -200,9 +217,9 @@ jobs:
         run: |
           WORKERS=${WORKERS:-2}
           echo "Running shard ${SHARD}/${SHARD_TOTAL} with $WORKERS workers"
-          pnpm exec playwright test --project default \
-            --workers="$WORKERS" \
-            --shard="${SHARD}/${SHARD_TOTAL}" \
+          pnpm exec playwright test --project default \\
+            --workers="$WORKERS" \\
+            --shard="${SHARD}/${SHARD_TOTAL}" \\
             --reporter=blob
 
       - name: Upload blob report
@@ -251,10 +268,27 @@ jobs:
           path: frontend/resources/public
           fail-on-cache-miss: true
 
+      - name: Get pnpm store path
+        id: pnpm-cache
+        shell: bash
+        run: echo "store_path=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Restore pnpm store cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('plugins/pnpm-lock.yaml') }}
+          path: ${{ steps.pnpm-cache.outputs.store_path }}
+
       - name: Install deps
         working-directory: ./plugins
         run: |
           pnpm install;
+
+      - name: Save pnpm store cache
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('plugins/pnpm-lock.yaml') }}
+          path: ${{ steps.pnpm-cache.outputs.store_path }}
 
       - name: Install Playwright Chromium
         working-directory: ./plugins
@@ -291,10 +325,27 @@ jobs:
           path: frontend/resources/public
           fail-on-cache-miss: true
 
+      - name: Get pnpm store path
+        id: pnpm-cache
+        shell: bash
+        run: echo "store_path=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Restore pnpm store cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('plugins/pnpm-lock.yaml') }}
+          path: ${{ steps.pnpm-cache.outputs.store_path }}
+
       - name: Install deps
         working-directory: ./plugins
         run: |
           pnpm install;
+
+      - name: Save pnpm store cache
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('plugins/pnpm-lock.yaml') }}
+          path: ${{ steps.pnpm-cache.outputs.store_path }}
 
       - name: Install Playwright Chromium
         working-directory: ./plugins
@@ -349,7 +400,7 @@ jobs:
         env:
           PLAYWRIGHT_JSON_OUTPUT_NAME: report.json
         run: |
-          pnpm exec playwright merge-reports \
+          pnpm exec playwright merge-reports \\
             --reporter=html,json,list ./all-blob-reports
 
       - name: Test summary
@@ -361,9 +412,9 @@ jobs:
             echo "No report produced (all shards failed early)." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          jq -r -f ../.github/scripts/playwright-summary.jq report.json \
-            >> "$GITHUB_STEP_SUMMARY" \
-            || echo "Summary generation failed; see the HTML report artifact." \
+          jq -r -f ../.github/scripts/playwright-summary.jq report.json \\
+            >> "$GITHUB_STEP_SUMMARY" \\
+            || echo "Summary generation failed; see the HTML report artifact." \\
                >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload JSON report
