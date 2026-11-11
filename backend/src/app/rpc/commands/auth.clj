@@ -230,12 +230,12 @@
 
 ;; ---- COMMAND: Prepare Register
 
-(defn- validate-registration-flags!
+(defn- check-registration-flags
   ;; The `:backend` is the one embedded in the verified
   ;; `:prepared-register` token: `"penpot"` for the password flow, the
   ;; provider type (`"oidc"`, `"google"`, ...) for SSO flows.
   ([cfg backend invitation]
-   (validate-registration-flags! cfg backend invitation false))
+   (check-registration-flags cfg backend invitation false))
   ([cfg backend invitation lock-invitation?]
    (if (= backend penpot-backend)
      (do
@@ -287,7 +287,7 @@
 
     (when (and invitation?
                (not (contains? cf/flags :registration)))
-      (validate-registration-flags! cfg penpot-backend invitation)))
+      (check-registration-flags cfg penpot-backend invitation)))
 
   (when (and (email.blacklist/enabled? cfg)
              (email.blacklist/contains? cfg (:email params)))
@@ -522,7 +522,7 @@
   (let [claims     (tokens/verify cfg {:token token :iss :prepared-register})
         invitation (when-let [token (:invitation-token claims)]
                      (tokens/verify cfg {:token token :iss :team-invitation}))
-        _          (validate-registration-flags! cfg (or (:backend claims) penpot-backend) invitation true)
+        _          (check-registration-flags cfg (or (:backend claims) penpot-backend) invitation true)
         params     (cond-> claims
                      (:accept-newsletter-updates params)
                      (update :props assoc :newsletter-updates true))
