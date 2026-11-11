@@ -1044,7 +1044,14 @@
       (let [profile (th/db-get :profile {:email email})]
         (t/is (some? profile))
         (t/is (= "oidc" (:auth-backend profile)))
-        (t/is (true? (:is-active profile)))))))
+        (t/is (true? (:is-active profile))))
+      ;; No password fallback while password login is disabled.
+      (let [login-out (th/command! {::th/type :login-with-password
+                                    :email email
+                                    :password "Whatever1!"})]
+        (t/is (not (th/success? login-out)))
+        (t/is (= :restriction (-> login-out :error ex-data :type)))
+        (t/is (= :login-disabled (-> login-out :error ex-data :code)))))))
 
 (t/deftest register-profile-rejects-oidc-without-registration-flags
   (with-redefs [app.config/flags #{:login-with-oidc}]
@@ -1085,6 +1092,36 @@
         (let [profile (th/db-get :profile {:email email})]
           (t/is (some? profile))
           (t/is (= "oidc" (:auth-backend profile))))))))
+
+(t/deftest register-profile-allows-oidc-with-canceled-invitation
+  ;; The SSO branch never consults the invitation row (like the OIDC
+  ;; callback): registration succeeds even when the invitation was
+  ;; canceled, and team membership fails later at `verify-token`.
+  (let [email   "oidc-canceled@example.com"
+        fixture (create-invitation-fixture email (ct/in-future "48h"))]
+    (with-redefs [app.config/flags #{:login-with-oidc :oidc-registration}]
+      (let [itoken (create-test-invitation-token fixture email)
+            token  (create-oidc-register-token email {:invitation-token itoken})]
+        (th/db-delete! :team-invitation
+                       {:team-id (:id (:team fixture))
+                        :email-to email})
+        (let [out    (th/command! {::th/type :register-profile
+                                   :token token})
+              result (:result out)
+              mdata  (meta result)]
+          (t/is (th/success? out))
+          (t/is (string? (:invitation-token result)))
+          (t/is (seq (:app.rpc/response-transform-fns mdata)))
+          (let [profile (th/db-get :profile {:email email})]
+            (t/is (some? profile))
+            (t/is (= "oidc" (:auth-backend profile))))
+          ;; The team is not joined: with the invitation row gone,
+          ;; accepting it fails.
+          (let [vout (th/command! {::th/type :verify-token
+                                   :token (:invitation-token result)})]
+            (t/is (not (th/success? vout)))
+            (t/is (= :validation (-> vout :error ex-data :type)))
+            (t/is (= :invalid-token (-> vout :error ex-data :code)))))))))
 
 (t/deftest verify-token-redirects-invitation-based-on-member-id
   (with-redefs [app.config/flags #{:login-with-password}]
